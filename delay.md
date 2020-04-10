@@ -1,4 +1,4 @@
-#Delay 
+# Introduction
 
 Delay is a very important in terms of thinking and modeling the spread of infectious disease, especially with data. This term is often loosely use and can be very confusing. For example
 
