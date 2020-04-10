@@ -21,12 +21,14 @@ We actually both mechanisms in COVID19 in two types of settings.
 
 2. People cannot get tested even when there are higher capacities due to testing critria.
 
+Question: how do we account for the backlog? we have all the numbers.
+
 ## Treatment
 1. limited resources, hospital beds and etc
 
 2. people are scare to get treatment, don't want to go unless it is very serious
 
-
+Question: How does this relate to the weird patterns we are seeing?
 
 
 
