@@ -10,9 +10,10 @@ Fill me with other delay examples.
 
 There are two types of delays (MLi: we have to use another term, it is too confusing) I want to talk about here, and I think the mechanisms are transferable.  
 
-1. serious-delay: an individual will only do XX if they have to. For example, an infected person will only get tested if they feel sick or meets all the testing criteria 
+1. **capacity-delay**: There is a capacity to do YY, so there is a backlog/waitlist/queue.
 
-2. capacity-delay: There is a capacity to do YY, so there is a backlog.
+2. **serious-delay**: an individual will only do XX if they have to. For example, an infected person will only get tested if they feel sick or meets all the testing criteria 
+
 
 We have seen evidence of both mechanisms in COVID19 in two types of settings. 
 
