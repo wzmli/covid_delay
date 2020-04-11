@@ -1,0 +1,184 @@
+---
+title: "Effect of delays and capacity on COVID-19 deaths"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+First, we begin with a simple toy model. Infected individuals can either have a mild or subclinical symptom ($I_m$) or severe symptoms ($I_s$). 
+Severe cases can lead to death $R$ unless they are treated $T$.
+For now, we assume that individuals with mild or subclinical symptoms will not seek treatment.
+$$
+\begin{aligned}
+\frac{dS}{dt} &= - \beta S(I_m + I_s)\\
+\frac{dI_m}{dt} &= (1-p) \beta S(I_m + I_s) - \gamma I_m \\
+\frac{dI_s}{dt} &= p \beta S(I_m + I_s) - (\gamma + \delta(t)) I_s\\
+\frac{dT}{dt} &= \delta(t) I_s - \sigma T \\
+\frac{dR}{dt} &= \gamma I_m + \sigma T \\
+\frac{dD}{dt} &= \gamma I_s \\
+\end{aligned}
+$$
+
+We compare two models.
+First, the baseline model assumes that individuals get tested at a constant rate $\delta(t) = \delta_0$.
+Second, we assume that there is treatment capacity $T_{\textrm{max}}$ (e.g., number of ICU beds).
+In this case, we assume:
+$$
+\delta(t) = \begin{cases}
+\sigma T/I_s & \delta_0 I_s \geq \sigma T_{\textrm{max}}, T \geq T_{\textrm{max}}\\
+\delta_0 & \textrm{otherwise}
+\end{cases}
+$$
+Therefore, the number of people in treatment stays constant when the resource is at its capacity.
+
+```{r c1, message=FALSE, fig.height=4, fig.width=10}
+library(deSolve)
+library(dplyr)
+library(ggplot2); theme_set(theme_bw())
+library(gridExtra)
+
+sir1 <- function(t, y, par) {
+  with(as.list(c(par, y)), {
+    dS <- -beta * S * (I_m+I_s)
+    dI_m <- (1-p) * beta * S * (I_m+I_s) - gamma * I_m
+    dI_s <- p * beta * S * (I_m+I_s) - (gamma + delta0) * I_s
+    dTr <- delta0 * I_s - sigma * Tr ## T stands for TRUE...
+    dR <- sigma * I_m + sigma * Tr
+    dD <- sigma * I_s
+    
+    list(c(dS, dI_m, dI_s, dTr, dR, dD))
+  })
+}
+
+sir2 <- function(t, y, par) {
+  with(as.list(c(par, y)), {
+    if (delta0 * I_s >= sigma * Tmax && Tr >= Tmax) {
+      delta <- sigma * Tr/I_s
+    } else {
+      delta <- delta0
+    }
+    
+    dS <- -beta * S * (I_m+I_s)
+    dI_m <- (1-p) * beta * S * (I_m+I_s) - gamma * I_m
+    dI_s <- p * beta * S * (I_m+I_s) - (gamma + delta) * I_s
+    dTr <- delta * I_s - sigma * Tr ## T stands for TRUE...
+    dR <- gamma * I_m + sigma * Tr
+    dD <- sigma * I_s
+    
+    list(c(dS, dI_m, dI_s, dTr, dR, dD))
+  })
+}
+
+par <- c(
+  beta=2.5,
+  gamma=1,
+  delta0=1,
+  sigma=1,
+  p=0.01,
+  Tmax=0.0005
+)
+
+yini <- c(S=1-1e-3, I_m=1e-3*0.99, I_s=1e-3*0.01, Tr=0, R=0, D=0)
+tvec <- seq(0, 30, by=0.1)
+
+sim1 <- as.data.frame(ode(yini, tvec, sir1, par)) %>%
+  mutate(
+    type="Model 1"
+  )
+
+sim2 <- as.data.frame(ode(yini, tvec, sir2, par)) %>%
+  mutate(
+    type="Model 2"
+  )
+
+simall <- bind_rows(sim1, sim2)
+
+g1 <- ggplot(simall) +
+  geom_line(aes(time, I_s, col=type)) +
+  scale_x_continuous("Time") +
+  scale_y_continuous("Proportion of severe cases waiting for treatment") +
+  scale_color_manual(values=c(1, 2)) +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = c(0.7, 0.7),
+    legend.title = element_blank()
+  )
+
+g2 <- ggplot(simall) +
+  geom_line(aes(time, Tr, col=type)) +
+  scale_x_continuous("Time") +
+  scale_y_continuous("Proportion under treatment") +
+  scale_color_manual(values=c(1, 2)) +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+g3 <- ggplot(simall) +
+  geom_line(aes(time, D, col=type)) +
+  scale_x_continuous("Time") +
+  scale_y_continuous("Proportion deceased") +
+  scale_color_manual(values=c(1, 2)) +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+grid.arrange(g1, g2, g3, nrow=1)
+```
+
+Then, we can quantify the effect of interaction between resouce capacity and time from infection to treatment on total deaths as well as proportion of deaths due to limited resource.
+
+
+```{r c2, message=FALSE, fig.height=4, fig.width=10}
+nsim <- 51
+Tmaxvec <- seq(0.0001, 0.001, length.out = nsim)
+delta0vec <- seq(0.1, 4, length.out=nsim)
+
+simpar <- data.frame(
+  Tmax=rep(Tmaxvec, nsim),
+  delta0=rep(delta0vec, each=nsim)
+)
+
+reslist <- apply(simpar, 1, function(x) {
+  newpar <- par
+  
+  newpar[["Tmax"]] <- x[1]
+  newpar[["delta0"]] <- x[2]
+  
+  sim1 <- as.data.frame(ode(yini, tvec, sir1, newpar))
+
+  sim2 <- as.data.frame(ode(yini, tvec, sir2, newpar))
+  
+  data.frame(
+    Tmax=x[1],
+    delta0=x[2],
+    total=tail(sim2$D, 1),
+    rel=1-tail(sim1$D, 1)/tail(sim2$D, 1)
+  )
+})
+
+resdata <- reslist %>%
+  bind_rows
+
+g4 <- ggplot(resdata) +
+  geom_tile(aes(Tmax, delta0, fill=total)) +
+  geom_contour(aes(Tmax, delta0, z=total), col="white") +
+  scale_x_continuous("Maximum capacity", expand=c(0, 0)) +
+  scale_y_continuous(expression(delta[0]), expand=c(0, 0)) +
+  scale_fill_gradientn("", colors=c("black", "#8a0072", "#cf2661", "#f66d4e", "#ffb34a", "#f9f871")) +
+  ggtitle("A. Total deaths")
+
+g5 <- ggplot(resdata) +
+  geom_tile(aes(Tmax, delta0, fill=rel)) +
+  geom_contour(aes(Tmax, delta0, z=rel), col="white") +
+  scale_x_continuous("Maximum capacity", expand=c(0, 0)) +
+  scale_y_continuous(expression(delta[0]), expand=c(0, 0)) +
+  scale_fill_gradientn("", colors=c("black", "#8a0072", "#cf2661", "#f66d4e", "#ffb34a", "#f9f871")) +
+  ggtitle("B. Proportion of total deaths due to limited capacity")
+
+grid.arrange(g4, g5, nrow=1)
+```
+
+It's always better to get treated as soon as possible to reduce the total number of deaths.
+However, since there's resource capacity, the proportion of people that die from the limited capacity increases as people seek treatment quicker...
